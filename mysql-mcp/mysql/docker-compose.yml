@@ -1,0 +1,18 @@
+services:
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_test_password
+      MYSQL_DATABASE: example_db
+      MYSQL_USER: readonly_user
+      MYSQL_PASSWORD: readonly_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_test_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

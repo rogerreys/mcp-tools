@@ -1,0 +1,12 @@
+{
+  "host": "127.0.0.1",
+  "port": 3306,
+  "user": "readonly_user",
+  "password": "CHANGE_ME",
+  "database": "example_db",
+  "pool_size": 5,
+  "connect_timeout_s": 10,
+  "query_timeout_ms": 15000,
+  "max_rows": 200,
+  "max_rows_hard_limit": 1000
+}
