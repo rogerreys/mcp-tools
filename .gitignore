@@ -1,0 +1,12 @@
+config.json
+tests/_integration_config.json
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.uv-cache/
+app.ipynb
+.claude/*
