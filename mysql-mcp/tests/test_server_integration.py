@@ -69,6 +69,7 @@ def mcp_server() -> MCPServer:
                 "user": MYSQL_USER,
                 "password": MYSQL_PASSWORD,
                 "database": MYSQL_DATABASE,
+                "scripts_dir": str(Path(__file__).parent / "fixtures" / "scripts"),
             }
         )
     )
@@ -188,3 +189,47 @@ async def test_run_query_rejects_writes(mcp_server: MCPServer, sql: str) -> None
 async def test_run_query_rejects_multiple_statements(mcp_server: MCPServer) -> None:
     result = await _call(mcp_server, "run_query", {"sql": "SELECT 1; DROP TABLE customers"})
     assert result.is_error
+
+
+async def test_run_script_unknown_script_lists_available_ones(mcp_server: MCPServer) -> None:
+    result = await _call(mcp_server, "run_script", {"script_name": "does_not_exist.sql"})
+    assert result.is_error
+    assert "customer_orders.sql" in result.content[0].text
+
+
+async def test_run_script_missing_param_lists_what_is_required(mcp_server: MCPServer) -> None:
+    result = await _call(mcp_server, "run_script", {"script_name": "customer_orders.sql"})
+    assert result.is_error
+    assert "cust_id" in result.content[0].text
+
+
+async def test_run_script_runs_with_default_param(mcp_server: MCPServer) -> None:
+    result = await _call(
+        mcp_server, "run_script", {"script_name": "customer_orders.sql", "params": {"cust_id": 1}}
+    )
+    assert not result.is_error
+    statements = result.structured_content["statements"]
+    assert len(statements) == 2  # the two real SELECTs; the @cust_id assignment is not one
+    assert statements[0]["rows"][0]["full_name"] == "Ana Torres"
+    assert all(row["status"] in {"paid", "shipped"} for row in statements[1]["rows"])
+
+
+async def test_run_script_param_overrides_script_default(mcp_server: MCPServer) -> None:
+    result = await _call(
+        mcp_server, "run_script", {"script_name": "customer_orders.sql", "params": {"cust_id": 2}}
+    )
+    assert not result.is_error
+    statements = result.structured_content["statements"]
+    assert statements[0]["rows"][0]["full_name"] == "Bruno Silva"
+
+
+async def test_run_script_rejects_a_write_statement_wholesale(mcp_server: MCPServer) -> None:
+    result = await _call(
+        mcp_server, "run_script", {"script_name": "unsafe_write.sql", "params": {"cust_id": 1}}
+    )
+    assert result.is_error
+
+    # Nothing from the script's earlier, valid SELECT should have executed
+    # either - the whole script is validated before any statement runs.
+    verify = await _call(mcp_server, "run_query", {"sql": "SELECT full_name FROM customers WHERE id = 1"})
+    assert verify.structured_content["rows"][0]["full_name"] == "Ana Torres"

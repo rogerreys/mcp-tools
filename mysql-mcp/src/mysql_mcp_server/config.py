@@ -36,6 +36,12 @@ class AppConfig(BaseModel):
     max_rows: int = Field(default=200, ge=1)
     max_rows_hard_limit: int = Field(default=1000, ge=1)
 
+    # Directory of .sql "scripts" the run_script tool is allowed to execute.
+    # Relative paths are resolved (in load_config, below) against the
+    # directory containing config.json, not the process cwd - so this stays
+    # correct regardless of where the server is launched from.
+    scripts_dir: str = "../src/scripts_error"
+
     def model_post_init(self, __context: object) -> None:
         if self.max_rows > self.max_rows_hard_limit:
             # Keep the default sane relative to the hard cap rather than raising,
@@ -80,7 +86,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         )
 
     try:
-        return AppConfig.model_validate(data)
+        cfg = AppConfig.model_validate(data)
     except ValidationError as exc:
         missing_or_invalid = "; ".join(
             f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
@@ -89,3 +95,9 @@ def load_config(path: Path | None = None) -> AppConfig:
             f"Configuración inválida en '{resolved}': {missing_or_invalid}. "
             f"Revisa config.example.json para ver los campos requeridos."
         ) from exc
+
+    scripts_dir = Path(cfg.scripts_dir)
+    if not scripts_dir.is_absolute():
+        object.__setattr__(cfg, "scripts_dir", str((resolved.parent / scripts_dir).resolve()))
+
+    return cfg

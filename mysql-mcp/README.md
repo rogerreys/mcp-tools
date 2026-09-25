@@ -12,6 +12,7 @@ necesidad de conocer de antemano qué tablas o columnas existen.
 - `search_schema` — busca tablas/columnas por nombre parcial, cuando no se conoce el nombre exacto.
 - `search_data` — busca un valor de texto dentro de una tabla, o en varias si no se especifica cuál.
 - `run_query` — ejecuta SQL de solo lectura (`SELECT`/`SHOW`/`DESCRIBE`/`EXPLAIN`).
+- `run_script` — ejecuta un script `.sql` parametrizado de `scripts_dir` (varias sentencias que comparten variables de sesión de MySQL tipo `@w_operacionca`), pasando los valores reales vía `params`.
 
 Cualquier intento de escritura o DDL (`INSERT`/`UPDATE`/`DELETE`/`DROP`/`ALTER`/
 `CREATE`/...) se rechaza en dos capas: validación del texto SQL antes de tocar

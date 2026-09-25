@@ -20,7 +20,9 @@ never appear in a query unless it already matches a real object name.
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator, Literal
 
 import mysql.connector
@@ -35,13 +37,26 @@ from .models import (
     IndexInfo,
     QueryResult,
     SchemaMatch,
+    ScriptResult,
+    ScriptStatementResult,
     TableInfo,
     TableSchema,
 )
-from .sql_guard import validate_readonly_sql
+from .sql_guard import (
+    SqlNotAllowedError,
+    extract_assigned_variables,
+    is_pure_variable_assignment,
+    split_script_statements,
+    validate_readonly_sql,
+)
 
 SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", "sys"}
 _TEXT_DATA_TYPES = {"char", "varchar", "text", "tinytext", "mediumtext", "longtext", "enum", "set"}
+
+# Plain filename only (no path separators/traversal), must end in .sql. '&' is
+# allowed because it shows up in real script filenames in this project.
+_SCRIPT_NAME_RE = re.compile(r"^[A-Za-z0-9_.&-]+\.sql$")
+_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # MySQL error codes not exposed by name in mysql.connector.errorcode.
 _CR_CONN_HOST_ERROR = 2003
@@ -388,8 +403,6 @@ class Database:
         return results[:limit]
 
     def run_readonly(self, sql: str, params: list[Any] | None, max_rows: int) -> QueryResult:
-        from .sql_guard import SqlNotAllowedError  # local import avoids a cycle at module load time
-
         try:
             normalized_sql = validate_readonly_sql(sql)
         except SqlNotAllowedError as exc:
@@ -421,3 +434,138 @@ class Database:
                 raise _friendly_query_error(exc) from exc
 
         raise DatabaseError(f"Fallo de conexión con MySQL tras reintentar: {last_exc}")
+
+    # -- parametrized multi-statement scripts (see sql_guard for the parsing rules) --
+
+    def _scripts_dir(self) -> Path:
+        return Path(self._cfg.scripts_dir)
+
+    def list_scripts(self) -> list[str]:
+        scripts_dir = self._scripts_dir()
+        if not scripts_dir.is_dir():
+            return []
+        return sorted(p.name for p in scripts_dir.glob("*.sql"))
+
+    def _resolve_script_path(self, script_name: str) -> Path:
+        if not _SCRIPT_NAME_RE.match(script_name):
+            raise DatabaseError(
+                f"Nombre de script inválido: '{script_name}'. Debe ser solo un nombre de "
+                f"archivo terminado en .sql, sin rutas (p.ej. 'reglas.sql')."
+            )
+
+        scripts_dir = self._scripts_dir()
+        candidate = (scripts_dir / script_name).resolve()
+        try:
+            candidate.relative_to(scripts_dir.resolve())
+        except ValueError as exc:
+            raise DatabaseError(f"Nombre de script inválido: '{script_name}'.") from exc
+
+        if not candidate.is_file():
+            available = self.list_scripts()
+            raise DatabaseError(
+                f"El script '{script_name}' no existe en {scripts_dir}. "
+                f"Scripts disponibles: {', '.join(available) or '(ninguno)'}."
+            )
+        return candidate
+
+    def run_script(
+        self,
+        script_name: str,
+        params: dict[str, Any] | None,
+        max_rows: int,
+    ) -> ScriptResult:
+        """Run a curated, multi-statement .sql "script" from scripts_dir.
+
+        These scripts (see src/scripts_error/*.sql) are parametrized MySQL
+        diagnostic queries: a leading `SELECT @var:=value;` line declares an
+        "entry parameter" (typically an operation id), and the rest of the
+        script's SELECTs reference `@var` throughout. `params` supplies the
+        real values for those declared variables - they're bound via `SET
+        @var = %s` (never interpolated into SQL text), so the script's own
+        hardcoded literal is only ever a placeholder/example.
+
+        Every non-assignment statement is still validated as read-only and
+        the whole script runs inside one read-only transaction with an
+        unconditional rollback, same as run_query - a script is just several
+        validated statements sharing one session so the @variables persist.
+        """
+        params = dict(params or {})
+        script_path = self._resolve_script_path(script_name)
+
+        try:
+            script_text = script_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise DatabaseError(f"No se pudo leer el script '{script_name}': {exc}") from exc
+
+        statements = split_script_statements(script_text)
+
+        required_vars: list[str] = []
+        for stmt in statements:
+            if is_pure_variable_assignment(stmt):
+                for var in extract_assigned_variables(stmt):
+                    if var not in required_vars:
+                        required_vars.append(var)
+
+        missing = [v for v in required_vars if v not in params]
+        if missing:
+            raise DatabaseError(
+                f"Faltan parámetros requeridos por '{script_name}': {', '.join(missing)}. "
+                f"Este script espera: {', '.join(required_vars) or '(ninguno)'}."
+            )
+
+        for name in params:
+            if not _VAR_NAME_RE.match(name):
+                raise DatabaseError(
+                    f"Nombre de parámetro inválido: '{name}'. Debe ser un identificador "
+                    f"simple (letras, dígitos, guion bajo, sin empezar por dígito)."
+                )
+
+        # Statements that only assign session variables are dropped here -
+        # their caller-supplied values are set below via a parametrized SET,
+        # so nothing from `params` is ever interpolated into SQL text.
+        query_statements = [s for s in statements if not is_pure_variable_assignment(s)]
+        if not query_statements:
+            raise DatabaseError(f"El script '{script_name}' no contiene ninguna consulta ejecutable.")
+
+        validated: list[str] = []
+        for stmt in query_statements:
+            try:
+                validated.append(validate_readonly_sql(stmt))
+            except SqlNotAllowedError as exc:
+                raise DatabaseError(
+                    f"El script '{script_name}' contiene una sentencia no permitida: {exc}"
+                ) from exc
+
+        capped_max_rows = min(max_rows, self._cfg.max_rows_hard_limit)
+
+        try:
+            with self.connection() as cnx:
+                cur = cnx.cursor(dictionary=True)
+                cur.execute(f"SET SESSION MAX_EXECUTION_TIME={self._cfg.query_timeout_ms}")
+                for name, value in params.items():
+                    cur.execute(f"SET @{name} = %s", (value,))
+
+                results: list[ScriptStatementResult] = []
+                cnx.start_transaction(readonly=True)
+                try:
+                    for stmt in validated:
+                        cur.execute(stmt)
+                        rows = cur.fetchmany(capped_max_rows + 1)
+                        truncated = len(rows) > capped_max_rows
+                        rows = rows[:capped_max_rows]
+                        results.append(
+                            ScriptStatementResult(
+                                sql=stmt,
+                                columns=list(cur.column_names),
+                                rows=rows,
+                                row_count=len(rows),
+                                truncated=truncated,
+                            )
+                        )
+                finally:
+                    cnx.rollback()
+                cur.close()
+        except mysql.connector.Error as exc:
+            raise _friendly_query_error(exc) from exc
+
+        return ScriptResult(script=script_name, params=params, statements=results)

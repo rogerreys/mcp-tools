@@ -1,4 +1,4 @@
-"""MCP server entrypoint: registers the 6 read-only MySQL exploration tools.
+"""MCP server entrypoint: registers the 7 read-only MySQL exploration tools.
 
 Config is loaded and the connection is validated at import time (not inside
 main()) because `mcp dev` / `mcp run` import this module directly and call
@@ -16,7 +16,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from .config import ConfigError, load_config
 from .db import Database, DatabaseError, NotFoundError
-from .models import DataMatch, QueryResult, SchemaMatch, TableInfo, TableSchema
+from .models import DataMatch, QueryResult, SchemaMatch, ScriptResult, TableInfo, TableSchema
 
 try:
     _cfg = load_config()
@@ -119,6 +119,28 @@ def run_query(sql: str, params: list[Any] | None = None, max_rows: int = 200) ->
     what is requested.
     """
     return _handle(_db.run_readonly, sql, params, max_rows)
+
+
+@mcp.tool()
+def run_script(script_name: str, params: dict[str, Any] | None = None, max_rows: int = 200) -> ScriptResult:
+    """Run a curated, parametrized multi-statement .sql "script" (from the
+    server's configured scripts directory - e.g. reglas.sql) against the
+    target row(s) identified by `params`.
+
+    These scripts declare their entry parameters as a leading
+    `SELECT @var:=value;` statement (e.g. `@w_operacionca`, the operation id
+    to analyze); pass the real value(s) via `params` (e.g.
+    {"w_operacionca": 147900}) - they are bound safely, never interpolated
+    into SQL text. Every other statement in the script must still be
+    read-only (same rules as run_query) and runs inside one read-only
+    transaction, so the script can only ever report on data, never change it.
+
+    If `script_name` doesn't exist or `params` is missing a required
+    variable, the error message lists the available scripts / required
+    parameter names. `max_rows` caps each individual statement's result,
+    same as run_query.
+    """
+    return _handle(_db.run_script, script_name, params, max_rows)
 
 
 def run() -> None:

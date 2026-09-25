@@ -66,3 +66,17 @@ class DataMatch(BaseModel):
     table: str
     column: str
     row: dict[str, Any]
+
+
+class ScriptStatementResult(BaseModel):
+    sql: str
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count: int
+    truncated: bool
+
+
+class ScriptResult(BaseModel):
+    script: str
+    params: dict[str, Any]
+    statements: list[ScriptStatementResult]
