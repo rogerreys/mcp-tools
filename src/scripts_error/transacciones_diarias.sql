@@ -1,10 +1,8 @@
 # ------ file:TRANSACCIONES DIARIAS ------------------
-SELECT @w_operacionca:=147900;
-
-SELECT op.op_cliente,op.op_nombre, @w_banco := op_banco as banco, @w_operacionca:= op_operacion as op, op.op_migrada, op_reestructuracion,op_estado,
+SELECT op.op_cliente,op.op_nombre, @w_banco := op_banco as banco, @operacion:= op_operacion as op, op.op_migrada, op_reestructuracion,op_estado,
 op_monto, @w_fecha_mov:=op_fecha_ult_proceso as op_fecha_ult_proceso, op_fecha_ini, op_fecha_fin, op_estado, op_tipo_amortizacion, op.op_toperacion, op.*
 FROM cob_cartera.ca_operacion op WHERE
-op_operacion = @w_operacionca
+op_operacion = @operacion
 ;
 -- ErrorCAN -> Deteccion de errores em INTERES
 select
@@ -22,11 +20,12 @@ am_concepto, am_estado, am_secuencia , am_cuota, am_gracia, am_pagado, am_acumul
 date(di_fecha_ini) as di_fecha_ini, date(di_fecha_ven) as di_Fecha_ven, di_dias_cuota,
 (am_cuota+am_gracia) as 'cuota_AM', op_cuota, op_tipo_amortizacion, di_de_capital, di_de_interes, op_operacion, op_banco, op.op_cuota_ballom , op_estado, op_toperacion, op.op_fecha_ult_proceso
 from cob_cartera.ca_amortizacion am, cob_cartera.ca_dividendo di , cob_cartera.ca_operacion op
-where am.am_operacion = @w_operacionca
+where am.am_operacion = @operacion
 and am_operacion = di_operacion
 and am_dividendo = di_dividendo
 and am_operacion = op_operacion
 and am_concepto in ('INT')
+HAVING ErrorCAN like "NOK%"
 ;
 
 -- ErrorCAN -> Deteccion de errores em FECI
@@ -45,11 +44,12 @@ am_concepto, am_estado, am_secuencia , am_cuota, am_gracia, am_pagado, am_acumul
 date(di_fecha_ini) as di_fecha_ini, date(di_fecha_ven) as di_Fecha_ven, di_dias_cuota,
 (am_cuota+am_gracia) as 'cuota_AM', op_cuota, op_tipo_amortizacion, di_de_capital, di_de_interes, op_operacion, op_banco, op.op_cuota_ballom , op_estado, op_toperacion, op.op_fecha_ult_proceso
 from cob_cartera.ca_amortizacion am, cob_cartera.ca_dividendo di , cob_cartera.ca_operacion op
-where am.am_operacion = @w_operacionca
+where am.am_operacion = @operacion
 and am_operacion = di_operacion
 and am_dividendo = di_dividendo
 and am_operacion = op_operacion
 and am_concepto in ('FECI')
+HAVING ErrorCAN like "NOK%"
 ;
 
 -- ErrorCAN -> Deteccion de errores em CAP
@@ -68,9 +68,10 @@ am_concepto, am_estado, am_secuencia , am_cuota, am_gracia, am_pagado, am_acumul
 date(di_fecha_ini) as di_fecha_ini, date(di_fecha_ven) as di_Fecha_ven, di_dias_cuota,
 (am_cuota+am_gracia) as 'cuota_AM', op_cuota, op_tipo_amortizacion, di_de_capital, di_de_interes, op_operacion, op_banco, op.op_cuota_ballom , op_estado, op_toperacion, op.op_fecha_ult_proceso
 from cob_cartera.ca_amortizacion am, cob_cartera.ca_dividendo di , cob_cartera.ca_operacion op
-where am.am_operacion = @w_operacionca
+where am.am_operacion = @operacion
 and am_operacion = di_operacion
 and am_dividendo = di_dividendo
 and am_operacion = op_operacion
 and am_concepto in ('CAP') 
+HAVING ErrorCAN like "NOK%"
 ;

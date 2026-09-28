@@ -1,12 +1,9 @@
-# --------- file:REGLAS DE ERROR ------------------
-# SELECT @w_banco:='0000579599';
-SELECT @w_operacionca:=147900;
+-- ------- file:REGLAS DE ERROR ------------------
 
-SELECT @w_banco := op_banco as banco, @w_operacionca:= op_operacion as op, 
+SELECT @w_banco := op_banco as banco, @operacion:= op_operacion as op, 
 op_monto, op_fecha_ult_proceso, op_fecha_ini, op_fecha_fin, op_estado, op_tipo_amortizacion, op.* 
 FROM cob_cartera.ca_operacion op WHERE 
-op_operacion = @w_operacionca
-#op_banco IN (@w_banco)
+op_operacion = @operacion
 ;
 
 -- VAL-01 OPERACIONES CON FECI CERO QUE TUVIERON REAJUSTE
@@ -55,7 +52,7 @@ from cob_cartera.ca_amortizacion am,
 	and tr_operacion = op_operacion
 	and dtr_operacion = op_operacion 
     and op_estado not in (3,0,99)
-	and tr_operacion in (@w_operacionca )  #####  AQUI REEMPLAZAR LA OPERACION
+	and tr_operacion in (@operacion )  #####  AQUI REEMPLAZAR LA OPERACION
 ) as rej
 where am_operacion = operacion 
 and am_concepto    = concepto 
@@ -81,7 +78,7 @@ and am_dividendo = di_dividendo
 and op_operacion = op_operacion
 and am_cuota  < abs(am_gracia ) 
 and am_gracia < 0
-and op_operacion in (@w_operacionca) -- (@w_operacionca   )  #####  AQUI REEMPLAZAR LA OPERACION
+and op_operacion in (@operacion)
 and op_estado not in (3,0,99) 
 -- order by am_dividendo, am_concepto
 ; 
@@ -106,7 +103,7 @@ where  op_operacion in (select op_operacion
 							and am_cuota  < abs(am_gracia ) 
 							and am_gracia < 0
 							and op_estado not in (3,0,99)
- 							and op_operacion in  (@w_operacionca) -- (@w_operacionca)  #####  AQUI REEMPLAZAR LA OPERACION							
+ 							and op_operacion in  (@operacion)
 );
 
 # R04: TRANSACCIONES PAG QUE NO CONTABILIZAN XQ LOS RUBROS SON MAYORES A LA CUENTA PUENTE
@@ -128,7 +125,7 @@ select * from (
 		and op_operacion = t.tr_operacion 
 		and op_operacion = dtr_operacion
 		# and dtr_secuencial = 48	
-		and op_operacion = @w_operacionca
+		and op_operacion = @operacion
 		group by tr_banco, tr_operacion, tr_fecha_ref, tr_secuencial, tr_tran
 		) oper
 where oper.Dif <> 0
@@ -174,7 +171,7 @@ from cob_cartera.ca_operacion o, cob_cartera.ca_amortizacion a, cob_cartera.ca_d
 	WHERE  o0.op_operacion = a0.am_operacion 
 	and a0.am_acumulado+a0.am_gracia-a0.am_pagado <> 0 
 	and o0.op_estado = 3
-	AND o0.op_operacion = @w_operacionca
+	AND o0.op_operacion = @operacion
 	group by o0.op_operacion 
 	) oper_can
 WHERE  op_operacion = am_operacion 
@@ -201,7 +198,7 @@ and am_cuota <> am_acumulado
 and am_acumulado > 0
 and am_pagado    > 0
 and op_estado not in (0,99,3)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 ;
 
 # R06.1: Op ACT Rub CAN [Tienen Saldo pendiente]
@@ -219,7 +216,7 @@ and am_dividendo = di_dividendo
 and am_estado = 3
 and am_acumulado + am_gracia - am_pagado  <> 0 
 and op_estado not in (0,99,3)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 ;
 
 # R07: Op ACT RUBROS CAN am_cuota = 0 PERO am_gracia <> 0 ABS-Gracia > Pagado
@@ -235,7 +232,7 @@ and am_dividendo = di_dividendo
 and am_cuota    = 0
 and am_gracia  <> 0
 and abs(am_gracia)  > am_pagado
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 and op_estado not in (0,99,3)
 and am_estado = 3
 limit 100
@@ -255,7 +252,7 @@ and am_cuota   = 0
 and am_gracia < 0
 and abs(am_gracia)  > am_pagado
 and not EXISTS (select 1 from cob_cartera.ca_amortizacion_his where amh_operacion = a.am_operacion and amh_concepto = 'FECI' and amh_dividendo = a.am_dividendo and amh_secuencial =1 and amh_cuota = 0 )
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 and op_estado not in (0,99,3)
 GROUP by op_banco, op_operacion, op_estado,   op_tipo_amortizacion,	op_toperacion,  case when op_migrada is null then 'COBIS' else 'MIGRADA' end, am_concepto, am_estado ;
 
@@ -272,7 +269,7 @@ and tr_operacion = dtr_operacion
 and tr_secuencial = dtr_secuencial 
 and tr_operacion = op_operacion
 and dtr_codvalor = 13040
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 group by op_banco, op_operacion, op_estado,   op_tipo_amortizacion,	op_toperacion,  case when op_migrada is null then 'COBIS' else 'MIGRADA' end,
 tr_fecha_ref, tr_secuencial, tr_tran , tr_estado;
 
@@ -292,7 +289,7 @@ and am_estado = 3
 and ((am_cuota + am_gracia-am_pagado)<>0 and (am_acumulado + am_gracia-am_pagado) <> 0  )
 and (am_cuota+am_gracia) <> (am_acumulado + am_gracia)
 and op_estado not in (0,99,3)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 ;
 
 # R11.1: Op ACT/CAN PAG NormalPry + ABExtra -> Di CAN+VEN Rub CAN con Saldo. Cuota=Acumulado >Ppagado 
@@ -312,7 +309,7 @@ and di_estado in (3,2)
 and am_estado = 3
 and am_cuota = am_acumulado
 and op_estado not in (0,99)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 and (am_acumulado + am_gracia) > am_pagado  -- Luego de cancelar se incremento la cuota y acumulado
 -- and am_concepto in ('INT', 'FECI')
 -- and not exists (select 1 from cob_cartera.ca_transaccion where tr_operacion = o.op_operacion and tr_estado <> 'RV' and tr_tran in ('CPE', 'RES'))
@@ -348,7 +345,7 @@ and di_estado in (3,2)
 and am_estado = 3
 and ((am_acumulado + am_gracia) <> am_pagado  )
 and op_estado not in (0,99,3)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 and exists(select 1 from cob_cartera.ca_abono a, cob_cartera.ca_abono_det 
     where ab_operacion = abd_operacion
    and ab_secuencial_ing = abd_secuencial_ing
@@ -381,7 +378,7 @@ and am_estado not in (3,4)
 and (am_acumulado + am_gracia) < am_pagado
 and am_gracia >= 0
 and op_estado not in (0,99,3)
-AND op_operacion = @w_operacionca
+AND op_operacion = @operacion
 ;
 
 
@@ -449,7 +446,7 @@ from cob_cartera.ca_operacion o, cob_cartera.ca_amortizacion a, cob_cartera.ca_d
 		  where tr_secuencial > 0 and tr_estado <> 'RV' and tr_tran in( 'CPE', 'RES') 
 		  and tr_banco = or_num_operacion and or_finalizo_renovacion = 'S'
 		  and tr_fecha_ref = or_fecha_concesion
-		  AND tr_operacion = @w_operacionca
+		  AND tr_operacion = @operacion
 		) transaccion
 WHERE  op_operacion = am_operacion 
 and op_operacion = di_operacion
@@ -485,7 +482,7 @@ select r15.* from
 	and di_dividendo  = am_dividendo 
 	and am_estado     = 3
 	and op_operacion = di_operacion
-	AND op_operacion = @w_operacionca
+	AND op_operacion = @operacion
 ) as r15
 where Saldo_acum + am_cuota = PRV
 order by am_operacion, am_dividendo, am_concepto 
@@ -511,7 +508,7 @@ from (
 	and roh_concepto = 'CAP' and roh_secuencial = t.tr_secuencial) as 'ro_valor'
 	from cob_cartera.ca_operacion_his o, cob_cartera.ca_amortizacion_his a, cob_cartera.ca_transaccion t
 	where oph_operacion = amh_operacion
-	and oph_operacion in (@w_operacionca) ##### AQUI REEMPLAZAR LA OPERACION
+	and oph_operacion in (@operacion)
 	and amh_concepto = 'CAP'
 	and oph_secuencial = amh_secuencial
 	and tr_operacion = o.oph_operacion
@@ -525,7 +522,7 @@ from (
 	op_estado, max(op_monto), sum(am_cuota), min(am_dividendo), max(am_dividendo), max(ro_valor)
 	from cob_cartera.ca_operacion, cob_cartera.ca_amortizacion , ca_rubro_op
 	where op_operacion = am_operacion
-	and op_operacion in (@w_operacionca ) ##### AQUI REEMPLAZAR LA OPERACION
+	and op_operacion in (@operacion ) 
 	and am_concepto = 'CAP'
 	and op_operacion = ro_operacion
 	and ro_concepto = 'CAP'
@@ -554,7 +551,7 @@ and am_concepto = 'CAP' and am_dividendo >= 1 and am_dividendo < min(amh_dividen
 min(amh_dividendo) as 'div_ini', max(amh_dividendo) as 'div_fin', max(oph_monto) as op_monto
 from cob_cartera.ca_operacion_his o, cob_cartera.ca_amortizacion_his a, cob_cartera.ca_transaccion t, cob_cartera.ca_rubro_op_his r
 where oph_operacion = amh_operacion
-and oph_operacion in ( @w_operacionca ) ##### AQUI REEMPLAZAR LA OPERACION
+and oph_operacion in ( @operacion )
 and amh_concepto = 'CAP'
 and oph_secuencial = amh_secuencial
 and tr_operacion = o.oph_operacion
@@ -571,7 +568,7 @@ op_banco, op_operacion, op_tipo_amortizacion, op_toperacion,
 op_estado,max(ro_valor), sum(am_cuota), min(am_dividendo), max(am_dividendo), max(op_monto)
 from cob_cartera.ca_operacion, cob_cartera.ca_amortizacion , cob_cartera.ca_rubro_op
 where op_operacion = am_operacion
-and op_operacion in ( @w_operacionca ) ##### AQUI REEMPLAZAR LA OPERACION
+and op_operacion in ( @operacion ) 
 and am_concepto = 'CAP'
 and op_operacion = ro_operacion
 and ro_concepto = 'CAP'
@@ -591,7 +588,7 @@ from (
 	 am_operacion, am_concepto, sum(am_gracia) as gracia
 	from cob_cartera.ca_amortizacion 
 	where am_concepto in ('FECI', 'INT')
-	and am_operacion = @w_operacionca
+	and am_operacion = @operacion
 	-- and am_gracia <> 0
 	group by  am_operacion , am_concepto
 	having sum(am_gracia)<> 0
@@ -644,7 +641,7 @@ from
 				 am_operacion as operacion, am_concepto as concepto
 				from cob_cartera.ca_amortizacion 
 				where am_concepto in ('FECI', 'INT')
-				and am_operacion = @w_operacionca
+				and am_operacion = @operacion
 				and am_gracia <> 0
 				group by  am_operacion , am_concepto
 				having sum(am_gracia)<> 0 
@@ -672,7 +669,7 @@ amh_secuencial, oph_banco, amh_operacion, oph_estado, amh_concepto, sum(amh_grac
 (select max(tr_secuencial) from ca_transaccion where tr_operacion = o.oph_operacion and tr_secuencial < o.oph_secuencial ) as 'Sec_trn'
 from cob_cartera.ca_amortizacion_his, cob_cartera.ca_operacion_his o
 where amh_concepto in ('FECI', 'INT')
-and amh_operacion = @w_operacionca
+and amh_operacion = @operacion
 and amh_operacion = oph_operacion
 and amh_secuencial = oph_secuencial
 and amh_gracia <> 0
@@ -712,7 +709,7 @@ from
 		and tr_secuencial > t.tr_secuencial),99999) as 'tr_siguiente'
 	from ca_operacion o , ca_transaccion t, ca_operacion_his oh
 	where tr_operacion = op_operacion 
-	and tr_operacion in (@w_operacionca)
+	and tr_operacion in (@operacion)
 	and tr_tran = 'REJ'
 	and tr_estado  <> 'RV'
 	and tr_tran    <> 'RPA'
@@ -726,89 +723,3 @@ from
 ) as t2
 where GraciaAntes <> GraciaDespues
 order by op_banco, tr_fecha_mov;
-
-
-
-
-##############################################################################################################################################################
--- SCRIPTS VALIDACION OPERACIONES OK 
-##############################################################################################################################################################
-
-# R1: Cancelados con saldo
--- Cancelados con saldo  en ca_corrige_gracia
-SELECT r.* FROM (
-select 'R1: Cancelados con saldo' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_gracia where cg_estado = 'F' and cg_resultado = 'OK')
-and am_operacion = op_operacion
-and am_estado = 3
-and am_acumulado + am_gracia - am_pagado <> 0
- ) AS r where r.op_banco in (@w_banco);
- 
-# R2: G(-) mayor que cuota en proceso corrige_gracia
--- G(-) mayor que cuota en proceso corrige_gracia
-select r.* from (
-select 'R2: G(-) mayor que cuota en proceso corrige_gracia' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_gracia where cg_estado = 'F'  and cg_resultado = 'OK')
-and am_operacion = op_operacion
-and am_gracia < 0
-and am_cuota < abs(am_gracia)
-) as r where r.op_banco in (@w_banco);
- 
-# R3: suma Gracia <> CERO
--- suma Gracia <> CERO
-select 'R3: suma Gracia <> CERO' as 'Regla', op_banco, am_operacion, sum(am_gracia) from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_gracia where cg_estado = 'F'  and cg_resultado = 'OK')
-and am_operacion = op_operacion
-group by op_banco, am_operacion
-having sum(am_gracia) <> 0;
- 
-#R4: Cancelados con saldo 
--- Cancelados con saldo en ca_corrige_cuotagracia_canc
-select 'R4: Cancelados con saldo' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_cuotagracia_canc where cg_estado = 'F' and cg_resultado = 'OK')
-and am_operacion = op_operacion
-and am_estado = 3
-and am_acumulado + am_gracia - am_pagado <> 0;
- 
-# R5: G(-) mayor que cuota en proceso corrige_gracia
--- G(-) mayor que cuota en proceso corrige_gracia
-select r.* from (
-select 'R5: G(-) mayor que cuota en proceso corrige_gracia' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_cuotagracia_canc where cg_estado = 'F'  and cg_resultado = 'OK')
-and am_operacion = op_operacion
-and am_gracia < 0
-and am_cuota < abs(am_gracia)
-) as r where r.op_banco in (@w_banco);
- 
-# R6: suma Gracia <> CERO
--- suma Gracia <> CERO
-select 'R6: suma Gracia <> CERO' as 'Regla', op_banco, am_operacion, sum(am_gracia) from ca_amortizacion a, ca_operacion o
-where am_operacion in (select cg_operacion  from ca_corrige_cuotagracia_canc where cg_estado = 'F'  and cg_resultado = 'OK')
-and am_operacion = op_operacion
-group by op_banco, am_operacion
-having sum(am_gracia) <> 0;
- 
- 
-#R7: Cancelados con saldo
--- Cancelados con saldo en tablas diarias
-select 'R7: Cancelados con saldo' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select op_operacion  from ca_operacion where op_operacion in (@w_operacionca))
-and am_operacion = op_operacion
-and am_estado = 3
-and am_acumulado + am_gracia - am_pagado <> 0;
- 
-# R8: G(-) mayor que cuota en proceso corrige_gracia
--- G(-) mayor que cuota en proceso corrige_gracia
-select 'R8: G(-) mayor que cuota en proceso corrige_gracia' as 'Regla', op_banco, a.* from ca_amortizacion a, ca_operacion o
-where am_operacion in (select op_operacion  from ca_operacion where  op_operacion in (@w_operacionca))
-and am_operacion = op_operacion
-and am_gracia < 0
-and am_cuota < abs(am_gracia);
- 
-# R9: suma Gracia <> CERO
--- suma Gracia <> CERO
-select 'R9: suma Gracia <> CERO' as 'Regla',op_banco, am_operacion, sum(am_gracia) from ca_amortizacion a, ca_operacion o
-where am_operacion in (select op_operacion  from ca_operacion where  op_operacion in (@w_operacionca))
-and am_operacion = op_operacion
-group by op_banco, am_operacion
-having sum(am_gracia) <> 0;

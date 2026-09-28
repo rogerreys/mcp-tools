@@ -1,7 +1,6 @@
 
 # ------ file:TRANSACCIONES HISTORICAS + DIARIAS ------------------
-SELECT @w_operacionca:=147900, @div_ini:=41, @div_hasta:=91;
-SELECT @concepto:='FECI'; -- 'CAP', 'INT'
+-- SELECT @w_operacionca:=147900,  @div_ini:=41,  @div_hasta:=91; @concepto:='FECI' | 'CAP' | 'INT'
 
 SELECT @w_banco := op_banco as banco, @w_operacionca:= op_operacion as op, op.op_cliente,op.op_nombre, op.op_migrada, op_reestructuracion,op_estado,
 op_monto, @w_fecha_mov:=op_fecha_ult_proceso as op_fecha_ult_proceso, op_fecha_ini, op_fecha_fin, op_estado, op_tipo_amortizacion, op.op_toperacion, op.*
